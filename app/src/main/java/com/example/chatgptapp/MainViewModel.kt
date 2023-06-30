@@ -6,20 +6,22 @@ import android.speech.SpeechRecognizer
 import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
-import com.example.chatgptapp.ApiService
-import com.example.chatgptapp.RetrofitService
-import com.example.chatgptapp.models.ChatMessage
-import com.example.chatgptapp.models.ChatRequest
-import com.example.chatgptapp.models.ChatResponse
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.IOException
 import java.util.Locale
 
 class MainViewModel : ViewModel() {
 
     private val RQ_SPEECH_REC = 102
-    private val apiService: ApiService = RetrofitService.apiService
+    private val client = OkHttpClient()
 
     fun askSpeechInput(context: Context) {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -37,36 +39,52 @@ class MainViewModel : ViewModel() {
         if (requestCode == RQ_SPEECH_REC && resultCode == Activity.RESULT_OK) {
             val result = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
             val message = result?.get(0).toString()
-            Log.d("Mesaj: ", message)
-            sendChatMessage(context, message)
+
+            getResponse(message) { response ->
+                Log.d("Mesaj: ", response)
+            }
         }
     }
+    fun getResponse(question:String, callback: (String) -> Unit) {
+        val apiKey="YOUR-API-KEY"
+        val url="https://api.openai.com/v1/completions"
 
-    fun sendChatMessage(context: Context, message: String) {
-        val chatRequest = ChatRequest(
-            listOf(
-                ChatMessage("system", "Hello"),
-                ChatMessage("user", message)
-            )
-        )
+        val requestBody="""
+            {
+            "model": "text-davinci-003",
+            "prompt": "$question",
+            "max_tokens": 500,
+            "temperature": 0
+            }
+        """.trimIndent()
 
-        val call = apiService.getChatCompletion(chatRequest)
-        call.enqueue(object : Callback<ChatResponse> {
-            override fun onResponse(call: Call<ChatResponse>, response: Response<ChatResponse>) {
-                if (response.isSuccessful) {
-                    val chatResponse = response.body()
-                    Log.d("Mesaj: ", chatResponse.toString())
-                } else {
-                    val errorBody = response.errorBody()?.string()
-                    val errorMessage = errorBody ?: "Unknown Error"
-                    Log.d("Mesaj: ", errorMessage)
-                    Toast.makeText(context, "API Request Failed", Toast.LENGTH_SHORT).show()
-                }
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Authorization", "Bearer $apiKey")
+            .post(requestBody.toRequestBody("application/json".toMediaTypeOrNull()))
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("Mesaj: ","API failed",e)
             }
 
-            override fun onFailure(call: Call<ChatResponse>, t: Throwable) {
-                Toast.makeText(context, "API Request Failed", Toast.LENGTH_SHORT).show()
+            override fun onResponse(call: Call, response: Response) {
+                val body=response.body?.string()
+                if (body != null) {
+                    Log.v("Mesaj",body)
+                }
+                else{
+                    Log.v("Mesaj","empty")
+                }
+                val jsonObject= JSONObject(body)
+                val jsonArray: JSONArray =jsonObject.getJSONArray("choices")
+                val textResult=jsonArray.getJSONObject(0).getString("text")
+                callback(textResult)
             }
         })
     }
+
 }
+
