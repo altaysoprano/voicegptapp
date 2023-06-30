@@ -1,5 +1,6 @@
 package com.example.chatgptapp
 
+import MainViewModel
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
@@ -30,6 +31,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        viewModel.handleSpeechResult(requestCode, resultCode, data)
+        viewModel.handleSpeechResult(this, requestCode, resultCode, data)
     }
 }
